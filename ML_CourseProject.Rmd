@@ -24,7 +24,7 @@ cases<-read.csv("pml-testing.csv")
 The dataset contains number of factor variables of numeric nature,
 and some non-informative for our purpoces variables: **user_name**, **cvtd_timestamp**.
 The factor variables are converted to numeric format, extra variables removed:
-```{r convert}
+```{r convert, warning=FALSE}
 trSet<-trSet[,!(names(trSet)%in% c("user_name","cvtd_timestamp","new_window"))]
 cases<-cases[,!(names(cases)%in% c("user_name","cvtd_timestamp","new_window"))]
 classeBak<-trSet$classe
@@ -36,7 +36,7 @@ Since the dataset contains many variables with *NA* values dominating,
 these predictors (having overall *NA* quote more than 97%) will be omitted, 
 and the rest entries are free from NA values. In order to keep the model consistent,
 the same procedure is performed on the target **cases** data:
-```{r clean, echo=FALSE}
+```{r clean}
 trSetClean<-trSet[,sapply(trSet,function(col){sum(is.na(col))<0.97*length(col)})]
 sum(complete.cases(trSetClean)); dim(trSetClean)
 casesClean<-cases[,sapply(trSet,function(col){sum(is.na(col))<0.97*length(col)})]
@@ -50,7 +50,7 @@ The testing set is splitted: 30% to validation set,
 and rest to training (70%) and testing (30%).
 In order to demonstrate cross-validation procedure, two additional splittings
 to training/testing sets are performed:
-```{r split, echo=FALSE}
+```{r split}
 inValidat<-createDataPartition(y=trSetClean$classe, p=0.3, list=FALSE)
 validation<-trSetClean[inValidat,]; Build<-trSetClean[-inValidat,]
 inTrain<-createDataPartition(y=Build$classe, p=0.7, list=FALSE)
@@ -65,7 +65,7 @@ Since number of predictors (56) is still high, and, according to origin of the d
 some of them could be highly correlated, a Principle Component-based preprocessing is used.
 In order to capture 70 percent of the variance, it is enough to use 9 to 11 principal components,
 depending on selection of the training set:
-```{r preprocess, echo=FALSE}
+```{r preprocess}
 preProc<-preProcess(training[,-57], method="pca", thresh=0.7)
 preProc$numComp
 trainPC<-cbind(predict(preProc, training[,-57]), classe=training[,57]); testPC<-predict(preProc, testing[,-57])
@@ -84,7 +84,7 @@ and being able to run on 8GB RAM machine: **Random Forest** and **gradient boost
 In order to perform cross-validation and error estimation, each model is fitted three times,
 using *training*, *training2*, and *training3* sets for fitting, 
 and *testing*, *testing2*, and *testing3* for estimating the out-of-sample error by cross-validation.
-```{r modelsCrossVal, echo=FALSE}
+```{r modelsCrossVal}
 mod1a<-train(classe~., method="rf", data=trainPC)
 mod2a<-train(classe~., method="gbm", data=trainPC, verbose=FALSE)
 mod1b<-train(classe~., method="rf", data=trainPC2)
@@ -103,7 +103,7 @@ errC<-confusionMatrix(testing3$classe, predict(mod2c, testPC3))$overall[1]
 The error estimated by cross-validation is  5% for  **rf** method, and 22% for **gbm**.
 However, desining data partitioning the **validation** independent set have been generated,
 so true out-of-sample error rate is
-```{r OOSerror, echo=FALSE}
+```{r OOSerror}
 errA<-confusionMatrix(validation$classe, predict(mod1a, validationPC))$overall[1]
 errB<-confusionMatrix(validation$classe, predict(mod1b, validationPC2))$overall[1]
 errC<-confusionMatrix(validation$classe, predict(mod1c, validationPC3))$overall[1]
@@ -115,7 +115,7 @@ errC<-confusionMatrix(validation$classe, predict(mod2c, validationPC3))$overall[
 ```
 The out-of-sample error is  5% for  **rf** method, and 23% for **gbm**,
 it is very close to cross-validation estimations. The confidence intervals for accuracy associated with in-sample error for two type of models (**rf** and **gbm**) and three train/test partitionings for each model are shown below:
-```{r AccuPlot, echo=FALSE}
+```{r AccuPlot}
 resmp<-resamples(list(RandomForest1=mod1a, RandomForest2=mod1b, RandomForest3=mod1c, 
                       GBM1=mod2a, GBM2=mod2b, GBM3=mod2c))
 trellis.par.set(caretTheme())
@@ -123,14 +123,9 @@ dotplot(resmp, metric = "Accuracy")
 ```
 
 ### Model stacking
-In order to maintain high prediction accuracy, the model stacking method is implemented.
-```{r modelsStack, echo=FALSE}
-#pred1test<-predict(mod1, testPC)
-#pred2test<-predict(mod2, testPC)
-
+In order to maintain high prediction accuracy, the model stacking method is implemented:
+```{r modelsStack}
 predDF<-data.frame(pred1=predict(mod1a, testPC),pred2=predict(mod1b, testPC2),pred3=predict(mod1c, testPC3),pred4=predict(mod2a, testPC),pred5=predict(mod2b, testPC2),pred6=predict(mod2c, testPC3),classe=testing$classe)
-
-#predDF<-data.frame(pred1=pred1test,pred2=pred2test, classe=testing$classe)
 
 combModFit<-train(classe~., method="rf", data=predDF)
 
@@ -143,7 +138,7 @@ combPredV<-predict(combModFit, predVDF)
 The out-of-sample error rate for stacked model is 4%, that is better than any individual model used in the stacking.
 
 Applying the resulting stacked model to the target Quiz **cases** data set, we obtain
-```{r QuizCases, echo=FALSE}
+```{r QuizCases}
 cases6<-data.frame(pred1=predict(mod1a, casesPC),pred2=predict(mod1b, casesPC2),pred3=predict(mod1c, casesPC3),pred4=predict(mod2a, casesPC),pred5=predict(mod2b, casesPC2),pred6=predict(mod2c, casesPC3))
 data.frame(predict(combModFit, cases6))
 ```
